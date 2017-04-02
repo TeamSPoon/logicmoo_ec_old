@@ -1,112 +1,209 @@
-Slack Prolog Client
-=================
+# Output Format
 
-This library provides a websocket API to slack
+`plasp` 3 translates SAS and PDDL files into a uniform ASP fact format.
 
-https://github.com/swi-to-yap/slack_prolog/
+## Overview
 
-![](t/slack.png)
+Essentially, `plasp`’s output format consists of [state variables](#variables) that are modified by [actions](#actions) if their preconditions are fulfilled.
+Variables reference [entities](#constants-objects) that are affected by the actions.
+As with PDDL, the objective is to achieve a specific [goal](#goal) starting from an [initial state](#initial-state) by executing a sequence of actions.
 
-## Useful to Me?
+`plasp`’s variables correspond to the multivalued variables in SAS.
+PDDL predicates are turned into Boolean variables to make the output format consistent.
 
-* A Prolog client for the Slack [Web](https://api.slack.com/web) and [RealTime Messaging](https://api.slack.com/rtm) APIs. 
-* Still has a way to go but it gets users started by seeing how easy it was.
-* This piece of the puzzle will help you send messages to Slack via the Web API and send and receive messages via the Real Time API.
-* If you're trying to respond to slash commands, just write a basic web application and use this library to call the Slack Web API.
+Actions are modeled exactly as PDDL actions and SAS operators.
 
-## TODOS
+## In a Nutshell
 
-* In development add event hooks for users
-* Currently Posts over the https webclient (change this to the RTM)
-
-
-
-## Usage
-
-### Create a New Bot Integration
-
-This is something done in Slack, under [integrations](https://my.slack.com/services). Create a [new bot](https://my.slack.com/services/new/bot), and note its API token.
-
-![](t/register-bot.png)
-
-### Use the API Token
-
-```bash
-export SLACK_API_TOKEN=xoxb-01234567890-xxxxxxxxxxxxxxxx
-```
-
-### RealTime Client Config
-
-![First Slack Bot](t/first_slack_bot.pl)
-
-
-### REPL Examples
-
-The Real Time Messaging API is a WebSocket-based API that allows you to receive events from Slack in real time and send messages as user.
+The following illustrates `plasp`’s output format for the problem of turning switches on and off.
 
 ```prolog
+% declares the type "type(switch)"
+type(type(switch)).
 
-% navigats the web api and switches to the real time messaging system
-?- Client = slack_client.clients.new().
+% introduces a switch "constant(a)"
+constant(constant(a)).
+has(constant(a), type(switch)).
 
-?- $Client.register(hello ,
-  debug.print. ["Successfully connected, welcome ", $Client.self.name,
-   "to the '", $Client.team.name,"' team at https://", team.domain, ".slack.com."]).
+% declares a variable "variable(on(X))" for switches X
+variable(variable(on(X))) :- has(X, type(switch)).
 
+% the variable may be true or false
+contains(variable(on(X)), value(on(X)), true)) :- has(X, type(switch)).
+contains(variable(on(X)), value(on(X)), false)) :- has(X, type(switch)).
 
-?- $Client.register(message , 
-   data.text.contains("bot hi") -> message(channel: data.channel, text: ["Hi <@",data.user,">!"]) ;
-   not(data.text.contains('bot')) -> message( channel: data.channel, text: ["Sorry <@",data.user,">, what?"])).
+% declares the action "action(turnOn(X))", which requires switch X to be off and then turns it on
+action(action(turnOn(X))) :- has(X, type(switch)).
+precondition(action(turnOn(X)), variable(on(X)), value(on(X), false)) :- has(X, type(switch)).
+postcondition(action(turnOn(X)), effect(0), variable(on(X)), value(on(X), true)) :- has(X, type(switch)).
 
-?- $Client.register(close ,  debug.print( "Client is about to disconnect")).
+% initially, the switch is off
+initialState(variable(on(constant(a))), value(on(constant(a)), false)).
 
-% can register on the last created client (returned by slack_client.clients.new )
-?- slack_client.current.register(closed , 
-  debug.print. "Client has disconnected successfully!").
-
-?- $Client.start().
+% in the end, the switch should be on
+goal(variable(on(constant(a))), value(on(constant(a)), true)).
 ```
 
-You can send typing indicators with `typing`.
+## Syntax and Semantics
+
+`plasp` structures the translated ASP facts into multiple sections, which are explained in the following.
+
+### Feature Requirements
 
 ```prolog
-?- $Client.typing(channel: data.channel).
+% declares a required feature
+requires(feature(<name>)).
 ```
 
-You can send a ping with `ping`.
+`plasp` recognizes and declares advanced features used by the input problem, such as conditional effects, [mutex groups](#mutex-groups) and [axiom rules](#axiom-rules) (currently only SAS).
+See the [full list of supported features](feature-requirements.md) for more information.
+
+The feature requirement predicates may be used in meta encodings to warn about unsupported features.
+
+### Types
 
 ```prolog
-?- $Client.ping().
+% declares a <type>
+type(type(<name>)).
+
+% specifies that <type 1> inherits <type 2>
+inherits(type(<type 1>), type(<type 2>)).
+
+% specifies <constant> to have type type(<name>)
+has(<constant>, type(<name>)).
 ```
-## Installation
 
-Run `?- pack_install(logicmoo_planner)`.
+[Variables](#variables), [constants](#constants-objects), and [objects](#constants-objects) may be typed. Types are only available with PDDL and if typing is enabled.
 
+`plasp` automatically generates all matching `has` predicates for objects with types that inherit other types.
 
+### Variables
 
+```prolog
+% declares a <variable>
+variable(variable(<name>)).
 
-# Some TODOs
+% adds a <value> to the domain of a <variable>
+contains(<variable>, <value>).
+```
 
-Document this pack!
+`plasp`’s variables represent the current state of the planning problem.
+Variables are linked to the problem's [objects](#constants-objects) and [constants](#constants-objects).
 
-Write tests
+`plasp`’s variables are multivalued, and each variable has exactly one value at each point in time.
 
-Untangle the 'pack' install deps 
-(Moving predicates over here from logicmoo_base)
+With SAS, variable names are numbers starting at 0, `variable(<number>)`.
+SAS variables are inherently multivalued, which results in two or more values of the form `value(<SAS predicate>, <SAS value>)` for each variable.
 
+With PDDL, Boolean variables are created from the PDDL predicates.
+Variables are named after the PDDL predicates, `variable(<PDDL predicate>).`
+Each variable contains exactly two values (one `true`, one `false`) of the form `value(<PDDL predicate>, <bool>)`.
+Note that with PDDL, variables and values are named identically.
 
-# Not _obligated_ to maintain a git fork just to contribute
+### Actions
 
-Dislike having tons of forks that are several commits behind the main git repo?
+```prolog
+% declares an <action>
+action(action(<name>)).
 
-Be old school - Please ask to be added to TeamSPoon and Contribute directly !
+% defines that as a precondition to <action>, <variable> must have value <value>
+precondition(<action>, <variable>, <value>).
 
-Still, we wont stop you from doing it the Fork+PullRequest method
+% defines that after applying <action>, <variable> is assigned <value>
+postcondition(<action>, effect(<number>), <variable>, <value>).
 
-# [BSD 2-Clause License](LICENSE.md)
+% defines the condition of a conditional effect
+precondition(effect(<number>), <variable>, <value>).
 
-Copyright (c) 2017, 
-TeamSPoon and Douglas Miles <logicmoo@gmail.com> 
-All rights reserved.
+% specifies the costs of applying <action>
+costs(<action>, <number>).
+```
 
+Actions may require certain variables to have specific values in order to be executed.
+After applying an action, variables get new values according to the action's postconditions.
 
+Actions may have *conditional effects*, that is, certain postconditions are only applied if additional conditions are satisfied.
+For this reason, each conditional effect is uniquely identified with a predicate `effect(<number>)` as the second argument of the `postcondition` facts.
+The conditions of conditional effects are given by additional `precondition` facts that take the respective `effect(<number>)` predicates as the first argument.
+
+Unconditional effects are identified with `effect(unconditional)`.
+
+Conditional effects are currently only supported with SAS input problems.
+
+Actions may also have *action costs* required to apply them. Action costs are currently supported for SAS only.
+
+### Constants/Objects
+
+```prolog
+% declares a <constant> or object
+constant(constant(<name>)).
+
+% specifies <constant> to have type type(<name>)
+has(<constant>, <type>).
+```
+
+Constants and objects are the entities that are affected by [actions](#actions), for instance, the blocks in a Blocks World problem.
+Constants are global for a domain, while objects are problem-specific.
+
+`plasp` does not distinguish between the two (modeling both as constants), as both are identically used static identifiers.
+
+### Initial State
+
+```prolog
+% initializes <variable> with a specific <value>
+initialState(<variable>, <value>).
+```
+
+The initial state contains all [variable](#variables) assignments that hold before executing any [actions](#actions).
+
+Note that with PDDL, `plasp` sets all unspecified initial state variables to `false` in order to make the initial state total.
+
+### Goal
+
+```prolog
+% specifies that <variable> shall obtain <value> in the end
+goal(<variable>, <value>).
+```
+
+The goal specifies all variable assignments that have to be fulfilled after executing the plan.
+
+### Mutex Groups
+
+```prolog
+% declares a <mutex group>
+mutexGroup(mutexGroup(<number>)).
+
+% adds the assignment of <variable> to <value> to a <mutex group>
+contains(<mutex group>, <variable>, <value>).
+```
+
+SAS contains information about mutually exclusive [variable](#variables) assignments.
+That is, *at most one* variable assignment of each mutex group must be satisfied at all times.
+
+Mutex group facts are only present with SAS input programs and not PDDL.
+
+Mutex groups contain essential information in order to find plans correctly.
+That is, if mutex groups are present in `plasp`’s output, they have to be accounted for appropriately.
+
+### Axiom Rules
+
+```prolog
+% declares an <axiom rule>
+axiomRule(axiomRule(<number>)).
+
+% defines that as a precondition to <axiom rule>, <variable> must have value <value>
+precondition(<axiom rule>, <variable>, <value>).
+
+% defines that after applying <axiom rule>, <variable> is assigned <value>
+postcondition(<axiom rule>, effect(unconditional), <variable>, <value>).
+```
+
+Axiom rules are similar to [actions](#actions) in that they modify [variables](#variables) if certain preconditions are satisfied.
+However, axiom rules must be applied *immediately* as soon as their preconditions are satisfied.
+
+The second argument of `postcondition`, `effect(unconditional)`, is not used and exists only for consistency with [actions](#actions).
+
+Axiom rule facts are only present with SAS input programs and not PDDL.
+
+Axiom rules contain essential information in order to find plans correctly.
+That is, if axiom rules are present in `plasp`’s output, they have to be accounted for appropriately.
