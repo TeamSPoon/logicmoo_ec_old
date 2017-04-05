@@ -11,6 +11,8 @@
 */
 :-module(logicmoo_hyhtn,[]).
 
+:- use_module(library(prolog_pack)).
+:- if( \+ prolog_pack:current_pack(logicmoo_planners)).
 :- dynamic   user:file_search_path/2.
 :- multifile user:file_search_path/2.
 :- prolog_load_context(directory,Dir),
@@ -20,8 +22,9 @@
    (( \+ user:file_search_path(pack,Y)) ->asserta(user:file_search_path(pack,Y));true).
 :- attach_packs.
 :- initialization(attach_packs).
+:- endif.
 % [Required] Load the Logicmoo Library Utils
-:- user:ensure_loaded(library(logicmoo/util/logicmoo_util_all)).
+:- ensure_loaded(library(logicmoo_utils)).
 
 do_ss(A,B):-do_ss,!, must(do_ss0(A,B)).
 do_ss(A,A).
@@ -39,12 +42,16 @@ do_ss0(A,B):- A=..[F|AA],must_maplist(do_ss0,AA,BB),B=..[F|BB].
 system:term_expansion(A,B):- do_ss, loop_check(do_ss(A,B)).
 system:goal_expansion(A,B):- do_ss, loop_check(do_ss(A,B)).
 
-:- user:ensure_loaded(library(logicmoo_util_structs)).
-:- user:ensure_loaded(library(logicmoo_util_bb_env)).
+:- ensure_loaded(library(logicmoo_util_structs)).
+:- ensure_loaded(library(logicmoo_util_bb_env)).
 %:-asserta(do_ss).
 %do_ss_in_file.
 do_non_ss_in_file.
 term_expansion(A,B):-env_term_expansion(A,B).
-:-include(logicmoo_hyhtn_code).
-:-user:ensure_loaded(logicmoo_ocl_and_pddl).
+
+
+:- ensure_loaded(logicmoo_hyhtn_code).
+:- ensure_loaded(library(logicmoo_ocl_and_pddl)).
 % :-include(logicmoo_hyhtn_works).
+
+:- fixup_exports.

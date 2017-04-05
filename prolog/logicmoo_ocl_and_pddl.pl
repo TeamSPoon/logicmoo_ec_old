@@ -1,7 +1,12 @@
-%:- module(lp,[test_blocks/0,test_domain/1,test_all/0,test_rest/0,test_sas/0,test_dir_files_sas/1,test_dir_files_sas/3]).
+:- module(logicmoo_ocl_and_pddl,[test_blocks/0,test_domain/1,test_all/0,test_rest/0,test_sas/0,test_dir_files_sas/1,test_dir_files_sas/3]).
+
 %:- set_prolog_flag(gc,true).
 :- op(100,xfy,'=>').
 :- debug.
+
+:- style_check(-singleton).
+:- use_module(library(prolog_pack)).
+:- if( \+ prolog_pack:current_pack(logicmoo_planners)).
 :- dynamic   user:file_search_path/2.
 :- multifile user:file_search_path/2.
 :- prolog_load_context(directory,Dir),
@@ -11,13 +16,22 @@
    (( \+ user:file_search_path(pack,Y)) ->asserta(user:file_search_path(pack,Y));true).
 :- attach_packs.
 :- initialization(attach_packs).
+:- endif.
+
+
+:- prolog_load_context(directory,Dir),
+   must((absolute_file_name('../pddl',Y,[relative_to(Dir),file_type(directory)]),
+   (( \+ user:file_search_path(pddl,Y)) ->asserta(user:file_search_path(pddl,Y));true))).
+
+
 % [Required] Load the Logicmoo Library Utils
-:- user:ensure_loaded(library(logicmoo/util/logicmoo_util_all)).
+:- ensure_loaded(library(logicmoo_utils)).
+:- ensure_loaded(library(multimodal_dcg)).
+
 
 :- dynamic(use_local_pddl/0).
 
 use_local_pddl:-throw(uses_local_pddl).
-
 
 :- if((false,(gethostname(c3po);gethostname(titan)))).
 
@@ -47,7 +61,7 @@ user:my_pfc_add(A):-if_defined(pfc_add(A),assert_if_new(A)).
 
 
 :- if(\+current_predicate(init_locl_planner_interface0/4)).
-% :- show_call_entry(with_no_mpred_expansions(user:ensure_loaded(planner((logicmoo_hyhtn))))).
+% :- with_no_mpred_expansions(ensure_loaded(library(logicmoo_hyhtn))).
 :- endif.
 % :- set_prolog_flag(gc,true).
 
@@ -59,8 +73,8 @@ user:my_pfc_add(A):-if_defined(pfc_add(A),assert_if_new(A)).
 :- expects_dialect(sicstus).
 :- use_module(library(timeout)).
 :- use_module(library(lists)).
-:- user:ensure_loaded(library(logicmoo/util/logicmoo_util_structs)).
-%:- user:ensure_loaded(library(logicmoo/common_logic/common_logic_sexpr)).
+:- ensure_loaded(library(logicmoo_util_structs)).
+:- ensure_loaded(library(sexpr_reader)).
 
 :- decl_struct(domain(domain_name, requires, types, constants, predicates, functions, constraints, actions, dict(extraprops))).
 :- decl_struct(problem(problem_name, domain_name, requires, objects, init, goal, constraints, metric, length, dict(extraprops))).
@@ -106,14 +120,15 @@ must_filematch(A,B):-must((filematch(A,B))).
 
 test_all:-test_all(7).
 test_all(N):- 
-  must_filematch('./orig_pddl_parser/test/?*?/domain*.pddl',_),!,
-  (forall(must_filematch('./orig_pddl_parser/test/?*?/domain*.pddl',E),once(test_domain(E,N)))).
+  must_filematch(pddl('RobertSasak_Prolog-Planning-Library_test/?*?/domain*.pddl'),_),!,
+  (forall(must_filematch(pddl('RobertSasak_Prolog-Planning-Library_test/?*?/domain*.pddl'),E),
+                                                 once(test_domain(E,N)))).
 
-test_all(N):- expand_file_name('./orig_pddl_parser/test/?*?/domain*.pddl',RList),RList\=[],!,reverse(RList,List),
+test_all(N):- expand_file_name(pddl('RobertSasak_Prolog-Planning-Library_test/?*?/domain*.pddl'),RList),RList\=[],!,reverse(RList,List),
   forall(member(E,List),once(test_domain(E,N))).
 
 test_primaryobjects:- 
-  (forall(must_filematch('./primaryobjects_strips/?*?/domain*.*',E),once(test_domain(E)))). 
+  (forall(must_filematch(pddl('primaryobjects_strips/?*?/domain*.*'),E),once(test_domain(E)))). 
 
 min_sas(A,B,A):-A =< B,!.
 min_sas(_,A,A).
@@ -134,7 +149,7 @@ test_domain(DP,Num):-
   solve_files(DP,TP)))).
 
 load_domain(string(DP)):-!,load_file(string(DP)).
-test_domain(DP):- \+ atom(DP),forall((filematch(DP,FOUND),exists_file(FOUND)),test_domain(FOUND)),!.
+load_domain(DP):- \+ atom(DP),forall((filematch(DP,FOUND),exists_file(FOUND)),load_domain(FOUND)),!.
 load_domain(DP):- \+ exists_file(DP),!, forall(filematch(DP,MATCH),((exists_file(MATCH),load_domain(MATCH)))).
 load_domain(DP):-
    format('~q.~n',[load_domain(DP)]),
@@ -160,9 +175,9 @@ test_frolog:- test_dir_files_sas('frolog','p02-domain.pddl','p02.pddl'),
     test_dir_files_sas('frolog','tPddlAgent01-domain.pddl','tPddlAgent01.pddl'),
     !. % test_dir_files_sas('frolog','tPddlAgent02-domain.pddl','tPddlAgent02.pddl').
 
-test_blocks:- solve_files('./orig_pddl_parser/test/blocks/domain-blocks.pddl', 
-  './orig_pddl_parser/test/blocks/blocks-03-0.pddl'), fail.
-test_blocks:- fail, expand_file_name('./orig_pddl_parser/test/blocks/domain*.pddl',RList),reverse(RList,List),
+test_blocks:- solve_files(pddl('RobertSasak_Prolog-Planning-Library_test/blocks/domain-blocks.pddl'), 
+  pddl('RobertSasak_Prolog-Planning-Library_test/blocks/blocks-03-0.pddl')), fail.
+test_blocks:- fail, expand_file_name(pddl('RobertSasak_Prolog-Planning-Library_test/blocks/domain*.pddl'),RList),reverse(RList,List),
   forall(member(E,List),once(test_domain(E))).
 test_blocks.
 
@@ -230,7 +245,7 @@ solve_files_w_ocl_pt2(DD, PP):-
     term_to_ord_term(PP, P),prop_get(problem_name,P,PName),save_type_named(problem,PName,P),    
     reset_statistic)),
     !,
-   with_assertions(t_l:other_planner(hyhtn_solve), record_time(try_solve(PName, D,P,S),SolverTime)),
+   locally(t_l:other_planner(hyhtn_solve), record_time(try_solve(PName, D,P,S),SolverTime)),
     flag(time_used_other,X,X + SolverTime),
     show_statistic(P, S),
     !.
@@ -301,7 +316,7 @@ pmsg(D):- subst(D,=,'k_===_v',SS),wdmsg(SS),wdmsg((:-SS)).
 %   Set domain and problem on blackboard
 %
 :-thread_local(t_l:other_planner/1).
-solve(PN,D,P,S):- t_l:other_planner(C),!,logOnError(call(C,PN,D,P,S)),!.
+solve(PN,D,P,S):- t_l:other_planner(C),!,on_x_rtrace(call(C,PN,D,P,S)),!.
 
 solve(_,D, P, Solution):-
   must_det_l((
@@ -341,8 +356,8 @@ solve(_PN,D,P,Solution):-
 
 hyhtn_solve(_,D, P, Solution):-
   must_det_l((
-    logicmoo_hyhtn:env_clear_doms_and_tasks,
-    logicmoo_hyhtn:clean_problem,
+    env_clear_doms_and_tasks,
+    clean_problem,
     bb_put(currentProblem, P),
     bb_put(currentDomain, D),
     prop_get(init,P, UCI),
@@ -363,7 +378,7 @@ hyhtn_solve(_,D, P, Solution):-
     must_maplist(save_ocl_operators,A),
     bb_put(goalState, G),        
     bb_put(fictiveGoal, G))),
-    ignore(logicmoo_hyhtn:init_locol_planner_interface0(G,I,Solution)).
+    ignore(init_locol_planner_interface0(G,I,Solution)).
 
 save_ocl_operators(A):-dmsg(save_ocl_operators(A)), % varnames_for_assert(A,CA,Vars),
    must(( 
@@ -380,8 +395,8 @@ save_ocl_operators(A):-dmsg(save_ocl_operators(A)), % varnames_for_assert(A,CA,V
      append(Pos,Neg,POSNEG),
      append(PrecondHints,POSNEG,ALLHINTS),
      append(POSNEG,PrecondHints,REVALLHINTS),
-     logicmoo_hyhtn:to_ssify(ALLHINTS,se,PrecondHints,SE),
-     logicmoo_hyhtn:get_one_isa(S,X,REVALLHINTS),
+     to_ssify(ALLHINTS,se,PrecondHints,SE),
+     get_one_isa(S,X,REVALLHINTS),
      SC = sc(S,X,Neg=>Pos),
      OP = operator(UT,SE,SC,[]),
      varnames_for_assert(OP,COP,_Vars),
@@ -1150,11 +1165,12 @@ parseDomain(File, Output, R) :-
 
 :-thread_local(t_l:allow_sterm).
 
-domainBNF(Output, List, R):- with_assertions(tlbugger:skipMust, debugOnError0(domainBNF_dcg(Output, List, R))),!.
-domainBNF(Output, List, R):- with_assertions(t_l:allow_sterm,with_assertions(tlbugger:skipMust, debugOnError0(domainBNF_dcg(Output, List, R)))),!,
+domainBNF(Output, List, R):- locally(tlbugger:skipMust, debugOnError0(domainBNF_dcg(Output, List, R))),!.
+domainBNF(Output, List, R):- locally(t_l:allow_sterm,locally(tlbugger:skipMust, debugOnError0(domainBNF_dcg(Output, List, R)))),!,
    portray_clause((domainBNF:-t_l:allow_sterm,Output)).
 domainBNF(Output, List, R):-  sterm(O, List, R), must_det_l((sterm2pterm(O,P),prop_put_extra_extra(Output,P),portray_clause((ed(Output):-P)))).
-domainBNF(Output, List, R):- trace,with_no_assertions(tlbugger:skipMust, debugOnError0(domainBNF_dcg(Output, List, R))),!.
+domainBNF(Output, List, R):- % trace,
+             locally(-tlbugger:skipMust, debugOnError0(domainBNF_dcg(Output, List, R))),!.
 
 :-export(domainBNF_dcg//1).
 
@@ -1167,7 +1183,7 @@ sterm2pterm([S],S):-atom(S),!. % ,atom_concat(':',_,S),!.
 sterm2pterm([S|SLIST],PTERM):-atom(S),atom_concat(':',_,S),
             must_maplist(sterm2pterm,SLIST,PLIST),           
             PTERM=..[S,PLIST].
-sterm2pterm([S|SLIST],PTERM):-atom(S),\+ logicmoo_i_sexp_reader:svar(S,_),!,
+sterm2pterm([S|SLIST],PTERM):-atom(S),\+ svar(S,_),!,
             must_maplist(sterm2pterm,SLIST,PLIST),           
             PTERM=..[S|PLIST].
 sterm2pterm(SLIST,PLIST):- is_list(SLIST),!,must_maplist(sterm2pterm,SLIST,PLIST).
@@ -1507,8 +1523,8 @@ parseProblem(F, O, R) :-
 % Support for reading file as a list.
 % :- [readFile].
 
-problem(Output, List, R):- with_assertions(tlbugger:skipMust, debugOnError0(problem_dcg(Output, List, R))),!.
-problem(Output, List, R):- with_assertions(t_l:allow_sterm,with_assertions(tlbugger:skipMust, debugOnError0(problem_dcg(Output, List, R)))),!,
+problem(Output, List, R):- locally(tlbugger:skipMust, debugOnError0(problem_dcg(Output, List, R))),!.
+problem(Output, List, R):- locally(t_l:allow_sterm,locally(tlbugger:skipMust, debugOnError0(problem_dcg(Output, List, R)))),!,
    portray_clause((problem:-t_l:allow_sterm,Output)).
 % problem(P     , List, R):- dtrace,trace,must(sterm(O, List, R)),!,must(sterm2pterm(O,P)),!,portray_clause((ed:-P)).
 problem(Output, List, R):- must(problem_dcg(Output, List, R)),!.
@@ -1628,9 +1644,12 @@ fix_wordcase(Word,Word).
 %
 % read_file(+File, -List).
 %
+read_file( File, Words) :-  exists_file(File), !, seeing(Old),call_cleanup(( see(File), get_code(C), (read_rest(C, Words))),( seen, see(Old))),!.
+read_file(File0, Words) :-  must((must_filematch(File0,File),exists_file(File),read_file( File, Words))),!.
 read_file(string(String), Words, textDoc) :- must(open_string(String,In)),!, current_input(Old),call_cleanup(( set_input(In), get_code(C), (read_rest(C, Words))),( set_input(Old))),!.
 read_file( File, Words , File) :-  exists_file(File), !, seeing(Old),call_cleanup(( see(File), get_code(C), (read_rest(C, Words))),( seen, see(Old))),!.
 read_file(File0, Words,FinalName) :-  must((must_filematch(File0,File),exists_file(File),read_file( File, Words, FinalName))),!.
+
 
 /* Ends the input. */
 read_rest(-1,[]) :- !.
@@ -1721,6 +1740,10 @@ test_sas_sanity:-
       test_dir_sas('ipc2008-no-cybersec/netben-opt/elevators-strips/'), % FAIL ALL
       !.
 
+pddl_dir(PDDLDir,Dir):- atom(PDDLDir),absolute_file_name(PDDLDir,Dir0),expand_file_name(Dir0,DirS),DirS\==[],!,member(Dir,DirS).
+pddl_dir(PDDLDir,Dir):- atom(PDDLDir),absolute_file_name(pddl(PDDLDir),Dir0),expand_file_name(Dir0,DirS),DirS\==[],!,member(Dir,DirS).
+pddl_dir(PDDLDir,Dir):- absolute_file_name(PDDLDir,Dir),expand_file_name(Dir0,DirS),member(Dir,DirS).
+
 test_rest:-	
 	test_dir_sas('ipc2008-no-cybersec/seq-opt/parcprinter-strips/'),
 	test_dir_sas('ipc2008-no-cybersec/seq-opt/pegsol-strips/'),
@@ -1730,10 +1753,10 @@ test_rest:-
 	test_dir_sas('ipc2008-no-cybersec/seq-opt/woodworking-strips/'),
 	
         
-        expand_file_name('ipc2008-no-cybersec/?*?/*/',O),
+        expand_file_name('../pddl/ipc2008-no-cybersec/?*?/*/',O),
         forall(member(E,O),test_dir_sas(E)).
 
-test_dir_files_sas(Dir,D,P):- directory_file_path(Dir,D,DF), directory_file_path(Dir,P,PF),
+test_dir_files_sas(PDDLDir,D,P):- pddl_dir(PDDLDir,Dir), directory_file_path(Dir,D,DF), directory_file_path(Dir,P,PF),
         test_parse_file(DF),test_parse_file(PF),
         solve_files(DF,PF),!.
 
@@ -2268,11 +2291,6 @@ mysame_key(_, L, [], L).
 
 :- debug,(must(test_blocks)).
 
-:- prolog_load_context(directory,Dir),
-   must((absolute_file_name('../../../pddl/',Y,[relative_to(Dir),file_type(directory)]),
-   (( \+ user:file_search_path(pddl,Y)) ->asserta(user:file_search_path(pddl,Y));true))).
-
-
 
 
 :- solve_files(pddl('benchmarks/mystery/domain.pddl'),pddl('benchmarks/mystery/prob01.pddl')).
@@ -2297,14 +2315,18 @@ mysame_key(_, L, [], L).
 :- retractall(t_l:loading_files).
 :- endif.
 
+twhy
+  :- show_call(record_time(forall(between(1,1000000,_),forall(get_action_bb(_),true)),_Time1)),
+   show_call(record_time(forall(between(1,1000000,_),forall(actn(_,_),true)),_Time2)).
 
+% :- twhy.
 
-% BAD :- test_domain('./elearning/domain.pddl').
+% BAD :- test_domain(pddl('elearning/domain.pddl')).
 % :- test_all.
 
 % 
-% :- solve_files('benchmarks/nomystery-sat11-strips/domain.pddl','benchmarks/nomystery-sat11-strips/p01.pddl').
-% :- test_domain('./benchmarks/nomystery-sat11-strips/domain.pddl').
+% :- solve_files(pddl('benchmarks/nomystery-sat11-strips/domain.pddl'),pddl('benchmarks/nomystery-sat11-strips/p01.pddl')).
+% :- test_domain(pddl('benchmarks/nomystery-sat11-strips/domain.pddl').
 
 
 
@@ -2313,25 +2335,25 @@ mysame_key(_, L, [], L).
 
 /*
 
-:- test_domain('domains_ocl/toasterWorldv2/domain*').
+:- test_domain(pddl('domains_ocl/toasterWorldv2/domain*')).
 
-:- solve_files('regression-tests/issue58-domain.pddl','regression-tests/issue58-problem.pddl').
-:- forall(must_filematch('./hsp-planners-master/?*?/pddl/?*?/?*domain*.*',E),once(test_domain(E,4))).
-:- forall(must_filematch('./hsp-planners-master/?*?/examples/?*?/?*domain*.*',E),once(test_domain(E,5))).
+:- solve_files(pddl('regression-tests/issue58-domain.pddl'),pddl('regression-tests/issue58-problem.pddl')).
+:- forall(must_filematch(pddl('hsp-planners-master/?*?/pddl/?*?/?*domain*.*'),E),once(test_domain(E,4))).
+:- forall(must_filematch(pddl('hsp-planners-master/?*?/examples/?*?/?*domain*.*'),E),once(test_domain(E,5))).
 
-:- test_domain('./benchmarks/nomystery-sat11-strips/domain.pddl').
+:- test_domain(pddl('benchmarks/nomystery-sat11-strips/domain.pddl')).
 
-test_blocks:- fail, test_domain('./benchmarks/nomystery-sat11-strips/domain.pddl',RList),reverse(RList,List),
+test_blocks:- fail, test_domain(pddl('benchmarks/nomystery-sat11-strips/domain.pddl',RList),reverse(RList,List),
   forall(member(E,List),once(test_domain(E))).
 
 % :-asserta(t_l:loading_files).
 
-:- forall(must_filematch('./rover/?*?/?*domain*.*',E),once(load_domain(E))).
-:- forall(must_filematch('./hsp-planners-master/?*?/pddl/?*?/?*domain*.*',E),once(load_domain(E))).
-:- forall(must_filematch('./hsp-planners-master/?*?/examples/?*?/?*domain*.*',E),once(load_domain(E))).
-:- forall(must_filematch('./hsp-planners-master/?*?/examples/?*?/?*domain*.*',E),once(load_domain(E))).
-:- forall(must_filematch('./primaryobjects_strips/?*?/?*domain*.*',E),once(test_domain(E))).
-:- solve_files('hakank-pddl/monkey-domain.pddl','hakank-pddl/monkey-prob01.pddl').
+:- forall(must_filematch(pddl('rover/?*?/?*domain*.*'),E),once(load_domain(E))).
+:- forall(must_filematch(pddl('hsp-planners-master/?*?/pddl/?*?/?*domain*.*'),E),once(load_domain(E))).
+:- forall(must_filematch(pddl('hsp-planners-master/?*?/examples/?*?/?*domain*.*'),E),once(load_domain(E))).
+:- forall(must_filematch(pddl('hsp-planners-master/?*?/examples/?*?/?*domain*.*'),E),once(load_domain(E))).
+:- forall(must_filematch(pddl('primaryobjects_strips/?*?/?*domain*.*'),E),once(test_domain(E))).
+:- solve_files(pddl('hakank-pddl/monkey-domain.pddl'),pddl('hakank-pddl/monkey-prob01.pddl')).
 
 */ 
 
@@ -2342,4 +2364,4 @@ test_blocks:- fail, test_domain('./benchmarks/nomystery-sat11-strips/domain.pddl
 :- show_call(flag(time_used_other,W,W)).
 :- show_call(flag(time_used,W,W)).
 
-
+:- fixup_exports.
