@@ -1,4 +1,6 @@
-:-module(logicmoo_planner,[]).
+
+
+:- module(logicmoo_planner,[]).
 
 :- use_module(library(prolog_pack)).
 :- if( \+ prolog_pack:current_pack(logicmoo_planners)).
